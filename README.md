@@ -13,6 +13,7 @@ A lightweight Chrome Extension that helps users manage daily tasks directly from
 • Search tasks instantly
 • Light and Dark theme toggle
 • Browser notifications for overdue tasks
+• Nested subtasks
 
 ---
 
