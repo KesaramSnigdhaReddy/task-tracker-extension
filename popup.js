@@ -53,15 +53,15 @@ addTaskButton.addEventListener("click", () => {
     return;
   }
 
-  const taskObj = {
-    id: Date.now(),  // Use current timestamp as a unique ID
-    task,
-    dueDate,
-    priority,
-    category,
-    completed: false
-  };
-
+ const taskObj = {
+  id: Date.now(),
+  task,
+  dueDate,
+  priority,
+  category,
+  completed: false,
+  subtasks: []
+};
   // Save to storage
   chrome.storage.local.get(["tasks"], (result) => {
     const tasks = result.tasks || [];
