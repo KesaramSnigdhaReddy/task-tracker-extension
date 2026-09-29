@@ -53,7 +53,7 @@ addTaskButton.addEventListener("click", () => {
     return;
   }
 
- const taskObj = {
+const taskObj = {
   id: Date.now(),
   task,
   dueDate,
@@ -62,6 +62,7 @@ addTaskButton.addEventListener("click", () => {
   completed: false,
   subtasks: []
 };
+
   // Save to storage
   chrome.storage.local.get(["tasks"], (result) => {
     const tasks = result.tasks || [];
@@ -79,34 +80,359 @@ addTaskButton.addEventListener("click", () => {
 
 // Add task to UI
 function addTaskToUI(taskObj) {
-  const { id, task, dueDate, priority, category, completed } = taskObj;
+  // Make old tasks compatible with subtasks
+  if (!taskObj.subtasks) {
+    taskObj.subtasks = [];
+  }
+
+  const {
+    id,
+    task,
+    dueDate,
+    priority,
+    category,
+    completed
+  } = taskObj;
 
   const li = document.createElement("li");
+
   li.className = `task ${completed ? "completed" : ""} priority-${priority.toLowerCase()}`;
+
   li.innerHTML = `
-    <div>
+    <div style="width:100%;">
       <span><strong>Task:</strong> ${task}</span><br>
       <span><strong>Due:</strong> ${new Date(dueDate).toLocaleString()}</span><br>
       <span><strong>Category:</strong> ${category}</span><br>
       <span><strong>Priority:</strong> ${priority}</span>
+
+      <div class="subtasks-container"></div>
+
+      <button class="add-subtask-btn"
+              style="background:#007bff; margin-top:8px;">
+        + Add Subtask
+      </button>
     </div>
+
     <button class="remove-task-btn">X</button>
-    <button class="mark-completed-btn">Mark as Completed</button>
+
+    <button class="mark-completed-btn">
+      ${completed ? "Completed" : "Mark as Completed"}
+    </button>
   `;
 
-  // Add event listener to remove button
+  // Remove task
   const removeButton = li.querySelector(".remove-task-btn");
-  removeButton.addEventListener("click", () => removeTask(id));
 
-  // Add event listener to mark as completed button
-  const markCompletedButton = li.querySelector(".mark-completed-btn");
-  markCompletedButton.addEventListener("click", () => markAsCompleted(id));
+  removeButton.addEventListener("click", () => {
+    removeTask(id);
+  });
+
+  // Complete task
+  const markCompletedButton =
+    li.querySelector(".mark-completed-btn");
+
+  markCompletedButton.addEventListener("click", () => {
+    markAsCompleted(id);
+  });
+
+  // Add subtask
+  const addSubtaskButton =
+    li.querySelector(".add-subtask-btn");
+
+  addSubtaskButton.addEventListener("click", () => {
+    addSubtask(id);
+  });
+
+  // Render existing subtasks recursively
+  const subtasksContainer =
+    li.querySelector(".subtasks-container");
+
+  renderSubtasks(
+    taskObj.subtasks,
+    subtasksContainer,
+    id
+  );
 
   if (completed) {
     completedTaskList.appendChild(li);
   } else {
     taskList.appendChild(li);
   }
+}
+// Add a subtask to any task or subtask
+function addSubtask(parentId) {
+  const subtaskName = prompt("Enter subtask:");
+
+  if (!subtaskName || !subtaskName.trim()) {
+    return;
+  }
+
+  chrome.storage.local.get(["tasks"], (result) => {
+    const tasks = result.tasks || [];
+
+    const success = addSubtaskRecursive(
+      tasks,
+      parentId,
+      subtaskName.trim()
+    );
+
+    if (success) {
+      chrome.storage.local.set({ tasks }, () => {
+        document.location.reload();
+      });
+    }
+  });
+}
+
+
+// Recursively search for the parent task
+function addSubtaskRecursive(items, parentId, subtaskName) {
+
+  for (const item of items) {
+
+    if (item.id === parentId) {
+
+      if (!item.subtasks) {
+        item.subtasks = [];
+      }
+
+      item.subtasks.push({
+        id: Date.now() + Math.random(),
+        task: subtaskName,
+        completed: false,
+        subtasks: []
+      });
+
+      return true;
+    }
+
+    if (item.subtasks && item.subtasks.length > 0) {
+
+      const found = addSubtaskRecursive(
+        item.subtasks,
+        parentId,
+        subtaskName
+      );
+
+      if (found) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+
+// Recursively display subtasks
+function renderSubtasks(subtasks, container, parentId) {
+
+  if (!subtasks || subtasks.length === 0) {
+    return;
+  }
+
+  const list = document.createElement("ul");
+
+  list.style.marginLeft = "20px";
+  list.style.marginTop = "8px";
+
+  subtasks.forEach((subtask) => {
+
+    const subtaskItem = document.createElement("li");
+
+    subtaskItem.style.padding = "6px";
+    subtaskItem.style.marginBottom = "5px";
+    subtaskItem.style.background = "#f1f5ff";
+    subtaskItem.style.borderRadius = "5px";
+
+    subtaskItem.innerHTML = `
+      <div>
+        <input
+          type="checkbox"
+          ${subtask.completed ? "checked" : ""}
+          class="subtask-checkbox"
+        >
+
+        <span
+          class="subtask-name"
+          style="${subtask.completed
+            ? "text-decoration:line-through;"
+            : ""}"
+        >
+          ${subtask.task}
+        </span>
+
+        <button
+          class="add-nested-subtask-btn"
+          style="
+            background:#28a745;
+            margin-left:5px;
+            font-size:11px;
+          "
+        >
+          + Subtask
+        </button>
+
+        <button
+          class="delete-subtask-btn"
+          style="
+            background:#dc3545;
+            margin-left:5px;
+            font-size:11px;
+          "
+        >
+          X
+        </button>
+      </div>
+
+      <div class="nested-subtasks"></div>
+    `;
+
+
+    // Complete / uncomplete subtask
+    const checkbox =
+      subtaskItem.querySelector(".subtask-checkbox");
+
+    checkbox.addEventListener("change", () => {
+
+      chrome.storage.local.get(["tasks"], (result) => {
+
+        const tasks = result.tasks || [];
+
+        updateSubtaskStatus(
+          tasks,
+          subtask.id,
+          checkbox.checked
+        );
+
+        chrome.storage.local.set(
+          { tasks },
+          () => document.location.reload()
+        );
+      });
+    });
+
+
+    // Add another level of subtask
+    const nestedButton =
+      subtaskItem.querySelector(
+        ".add-nested-subtask-btn"
+      );
+
+    nestedButton.addEventListener("click", () => {
+      addSubtask(subtask.id);
+    });
+
+
+    // Delete subtask
+    const deleteButton =
+      subtaskItem.querySelector(
+        ".delete-subtask-btn"
+      );
+
+    deleteButton.addEventListener("click", () => {
+
+      chrome.storage.local.get(["tasks"], (result) => {
+
+        const tasks = result.tasks || [];
+
+        deleteSubtaskRecursive(
+          tasks,
+          subtask.id
+        );
+
+        chrome.storage.local.set(
+          { tasks },
+          () => document.location.reload()
+        );
+      });
+    });
+
+
+    // Recursively render children
+    const nestedContainer =
+      subtaskItem.querySelector(
+        ".nested-subtasks"
+      );
+
+    renderSubtasks(
+      subtask.subtasks,
+      nestedContainer,
+      subtask.id
+    );
+
+
+    list.appendChild(subtaskItem);
+  });
+
+  container.appendChild(list);
+}
+
+
+// Recursively update completion status
+function updateSubtaskStatus(
+  items,
+  subtaskId,
+  completed
+) {
+
+  for (const item of items) {
+
+    if (item.id === subtaskId) {
+
+      item.completed = completed;
+
+      return true;
+    }
+
+    if (item.subtasks) {
+
+      const found = updateSubtaskStatus(
+        item.subtasks,
+        subtaskId,
+        completed
+      );
+
+      if (found) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+
+// Recursively delete a subtask
+function deleteSubtaskRecursive(
+  items,
+  subtaskId
+) {
+
+  for (let i = 0; i < items.length; i++) {
+
+    if (items[i].id === subtaskId) {
+
+      items.splice(i, 1);
+
+      return true;
+    }
+
+    if (items[i].subtasks) {
+
+      const deleted =
+        deleteSubtaskRecursive(
+          items[i].subtasks,
+          subtaskId
+        );
+
+      if (deleted) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 // Mark task as completed
